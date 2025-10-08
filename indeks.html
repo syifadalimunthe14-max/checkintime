@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Absensi Online</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons CDN -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Menggunakan font Inter */
+        html { font-family: 'Inter', sans-serif; }
+        .bg-gradient-siswa {
+            background: linear-gradient(135deg, #4f46e5 0%, #a78bfa 100%);
+        }
+        .bg-gradient-guru {
+            background: linear-gradient(135deg, #059669 0%, #34d399 100%);
+        }
+        .btn-primary {
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-primary:hover {
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            transform: translateY(-1px);
+        }
+        /* Style untuk modal */
+        .modal {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            z-index: 50;
+        }
+        .scrollable-table-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+    <!-- Kontainer Utama Aplikasi -->
+    <div id="app" class="flex-grow flex flex-col">
+        <!-- Konten akan dimuat di sini oleh JavaScript -->
+    </div>
+
+    <!-- Modal untuk pesan, seperti Alert pengganti -->
+    <div id="modal-message" class="fixed inset-0 hidden items-center justify-center modal transition-opacity duration-300 opacity-0">
+        <div class="bg-white rounded-xl p-6 shadow-2xl max-w-sm w-full transform scale-95 transition-transform duration-300">
+            <h3 id="modal-title" class="text-xl font-bold text-gray-800 mb-4">Pesan</h3>
+            <p id="modal-body" class="text-gray-600 mb-6"></p>
+            <div class="flex justify-end">
+                <button onclick="closeModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 shadow-md">Tutup</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal untuk Pengajuan Izin Siswa -->
+    <div id="leave-modal" class="fixed inset-0 hidden items-center justify-center modal transition-opacity duration-300 opacity-0">
+        <div class="bg-white rounded-xl p-8 shadow-2xl max-w-md w-full transform scale-95 transition-transform duration-300">
+            <h3 class="text-2xl font-bold text-gray-800 mb-6">Ajukan Ketidakhadiran</h3>
+            
+            <div class="mb-4">
+                <label for="leave-type" class="block text-sm font-medium text-gray-700 mb-1">Jenis Keterangan</label>
+                <select id="leave-type" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500" required>
+                    <option value="Sakit">Sakit (Wajib lampirkan surat dokter)</option>
+                    <option value="Izin">Izin (Urusan Keluarga/Lainnya)</option>
+                </select>
+            </div>
+
+            <div class="mb-4">
+                <label for="leave-date" class="block text-sm font-medium text-gray-700 mb-1">Tanggal Ketidakhadiran</label>
+                <input type="date" id="leave-date" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500" required>
+            </div>
+            
+            <div class="mb-6">
+                <label for="leave-reason" class="block text-sm font-medium text-gray-700 mb-1">Alasan Detail</label>
+                <textarea id="leave-reason" rows="3" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Contoh: Sakit demam, Izin menghadiri pernikahan, dll." required></textarea>
+            </div>
+            
+            <div class="flex justify-end space-x-3">
+                <button onclick="document.getElementById('leave-modal').classList.add('hidden', 'opacity-0')" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-lg transition duration-150">Batal</button>
+                <button onclick="submitLeaveRequest()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 shadow-md">Kirim Permintaan</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Data dan Konfigurasi Aplikasi (Simulasi Database) ---
+        const APP_ID = 'AbsensiOnlineApp';
+        const SCHOOL_COORDINATES = { lat: -6.1754, lon: 106.8272, radius: 0.1 }; // Koordinat simulasi: Monas, Jakarta (radius 0.1 km)
+        
+        // Data pengguna keras
+        let USERS = [
+            // Siswa Kelas 10A (Data Awal)
+            { id: 'S001', username: 'andi_siswa', password: '123', role: 'siswa', name: 'Andi Saputra', class: '10A' },
+            { id: 'S002', username: 'budi_siswa', password: '123', role: 'siswa', name: 'Budi Hartono', class: '10A' },
+            { id: 'S003', username: 'cinta_siswa', password: '123', role: 'siswa', name: 'Cinta Dewi', class: '10A' },
+            
+            // Guru (Data Awal)
+            { id: 'G001', username: 'yuni_guru', password: '456', role: 'guru', name: 'Ibu Yuni Anggraini', class: '10A' },
+            { id: 'G002', username: 'adi_guru', password: '456', role: 'guru', name: 'Pak Adi Wijaya', class: '10B' },
+            
+            // Guru Baru untuk Kelas XII-D
+            { id: 'G003', username: 'guru_xii_d', password: '456', role: 'guru', name: 'Ibu Syifa Amelia Dalimunthe', class: 'XII-D' },
+        ];
+
+        // --- Daftar 36 Nama Siswa Kelas XII-D ---
+        const STUDENT_NAMES_XIID = [
+            'Alya Putri Lestari', 'Bagus Tri Atmojo', 'Cahya Ningsih', 'Danu Fajar Pratama', 
+            'Eka Sari Dewi', 'Farhan Maulana', 'Gita Ayu Wulandari', 'Handoko Prawiro', 
+            'Indah Kusuma', 'Jaka Permana', 'Kartika Sari', 'Lucky Hidayat', 
+            'Maya Fitriani', 'Naufal Rizky', 'Octavia Bella', 'Pandu Wijaya', 
+            'Qoriatul Jannah', 'Rahmat Ilahi', 'Sinta Nurhaliza', 'Taufik Akbar', 
+            'Umi Kulsum', 'Vira Amelia', 'Wahyu Setiawan', 'Xena Adelia', 
+            'Yoga Pratama', 'Zaskia Ramadhani', 'Alvin Jaya Kusuma', 'Bella Cahyani', 
+            'Candra Kirana', 'Dwi Retno Wati', 'Faisal Rachman', 'Hana Amira', 
+            'Kevin Leonardo', 'Larasati Aulia', 'Miko Saputra', 'Nanda Ardian'
+        ];
+
+        // --- Tambahkan 36 Siswa Kelas XII-D ---
+        const studentCountXIID = STUDENT_NAMES_XIID.length;
+        for (let i = 0; i < studentCountXIID; i++) {
+            const studentId = `SD${String(i + 1).padStart(2, '0')}`; // Contoh ID: SD01, SD02, ... SD36
+            USERS.push({
+                id: studentId,
+                username: `siswa_d_${i + 1}`,
+                password: '123',
+                role: 'siswa',
+                name: STUDENT_NAMES_XIID[i],
+                class: 'XII-D'
+            });
+        }
+        // Total Siswa: 3 (10A) + 36 (XII-D) = 39 Siswa
+
+        let state = {
+            currentUser: null,
+            attendanceRecords: [],
+            leaveRequests: [],
+            currentPhotoBase64: null,
+            currentLocation: null,
+        };
+
+        // --- Utility Functions ---
+
+        /** Memuat data dari localStorage atau menginisialisasi dengan data dummy. */
+        function loadData() {
+            try {
+                const storedRecords = localStorage.getItem(`${APP_ID}_records`);
+                const storedLeaves = localStorage.getItem(`${APP_ID}_leaves`);
+
+                // Pastikan untuk selalu memanggil inisialisasi dummy jika data tidak ada
+                state.attendanceRecords = storedRecords ? JSON.parse(storedRecords) : initializeDummyRecords();
+                state.leaveRequests = storedLeaves ? JSON.parse(storedLeaves) : initializeDummyLeaves();
+
+                const storedUser = localStorage.getItem(`${APP_ID}_currentUser`);
+                if (storedUser) {
+                    state.currentUser = JSON.parse(storedUser);
+                }
+            } catch (e) {
+                console.error("Gagal memuat data dari localStorage:", e);
+                state.attendanceRecords = initializeDummyRecords();
+                state.leaveRequests = initializeDummyLeaves();
+            }
+        }
+
+        /** Menyimpan data ke localStorage. */
+        function saveData() {
+            localStorage.setItem(`${APP_ID}_records`, JSON.stringify(state.attendanceRecords));
+            localStorage.setItem(`${APP_ID}_leaves`, JSON.stringify(state.leaveRequests));
+            if (state.currentUser) {
+                localStorage.setItem(`${APP_ID}_currentUser`, JSON.stringify(state.currentUser));
+            } else {
+                localStorage.removeItem(`${APP_ID}_currentUser`);
+            }
+        }
+
+        /** Inisialisasi data dummy Izin/Cuti */
+        function initializeDummyLeaves() {
+            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+            const leaveIdCounter = state.leaveRequests.length + 1;
+
+            const dummyLeaves = [
+                // Izin Pending Hari Ini
+                { id: leaveIdCounter, userId: 'S003', date: getTodayDate(), reason: 'Demam tinggi, menunggu surat dokter', status: 'Pending', type: 'Sakit' },
+                // Izin Disetujui Kemarin
+                { id: leaveIdCounter + 1, userId: 'S002', date: yesterday, reason: 'Izin keluarga mendesak', status: 'Approved', type: 'Izin' },
+            ];
+            
+            return dummyLeaves;
+        }
+
+        /** Inisialisasi data absensi dummy untuk demonstrasi. */
+        function initializeDummyRecords() {
+            const today = getTodayDate();
+            const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+            const twoDaysAgo = new Date(Date.now() - (2 * 86400000)).toISOString().split('T')[0];
+            
+            // Ambil ID siswa XII-D pertama (Alya Putri Lestari) dan kedua (Bagus Tri Atmojo)
+            const studentD01Id = USERS.find(u => u.name === 'Alya Putri Lestari')?.id || 'SD01';
+            const studentD02Id = USERS.find(u => u.name === 'Bagus Tri Atmojo')?.id || 'SD02';
+
+            const dummyRecords = [
+                // Absen Andi (Hari Ini - Sudah Check In)
+                { userId: 'S001', date: today, checkIn: '07:15', checkOut: null, status: 'Hadir', photoUrl: 'placeholder', location: 'Sekolah' },
+                // Absen Cinta (Hari Ini - Pending Izin) - linked to leave ID 1
+                { userId: 'S003', date: getTodayDate(), checkIn: null, checkOut: null, status: 'Izin', photoUrl: null, location: null, leaveId: 1 },
+                // Absen Budi (Kemarin - Izin Disetujui) - linked to leave ID 2
+                { userId: 'S002', date: yesterday, checkIn: null, checkOut: null, status: 'Izin', photoUrl: null, location: null, leaveId: 2 },
+                // Absen Siswa D1 (2 Hari Lalu - Hadir Penuh)
+                { userId: studentD01Id, date: twoDaysAgo, checkIn: '07:05', checkOut: '15:30', status: 'Hadir', photoUrl: 'placeholder', location: 'Sekolah' },
+                // Absen Siswa D2 (Kemarin - Hadir)
+                { userId: studentD02Id, date: yesterday, checkIn: '07:30', checkOut: null, status: 'Hadir', photoUrl: 'placeholder', location: 'Sekolah' },
+            ];
+            return dummyRecords;
+        }
+
+        /** Menampilkan modal pesan kustom (pengganti alert/confirm). */
+        function showModal(title, body) {
+            const modalEl = document.getElementById('modal-message');
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-body').innerText = body;
+            modalEl.classList.remove('hidden');
+            setTimeout(() => {
+                modalEl.classList.remove('opacity-0');
+                modalEl.classList.add('flex', 'opacity-100');
+            }, 10);
+        }
+
+        /** Menutup modal pesan kustom. */
+        function closeModal() {
+            const modalEl = document.getElementById('modal-message');
+            modalEl.classList.add('opacity-0');
+            modalEl.classList.remove('opacity-100');
+            setTimeout(() => {
+                modalEl.classList.add('hidden');
+            }, 300);
+        }
+
+        /** Mengambil nama pengguna berdasarkan ID. */
+        function getUserNameById(userId) {
+            const user = USERS.find(u => u.id === userId);
+            return user ? user.name : 'Unknown User';
+        }
+        
+        /** Mengambil kelas pengguna berdasarkan ID. */
+        function getUserClassById(userId) {
+            const user = USERS.find(u => u.id === userId);
+            return user ? user.class : '-';
+        }
+
+        /** Mengambil tanggal hari ini dalam format YYYY-MM-DD. */
+        function getTodayDate() {
+            return new Date().toISOString().split('T')[0];
+        }
+        
+        /** Menghitung jumlah hari dalam bulan dan tahun tertentu. */
+        function daysInMonth(month, year) {
+            // new Date(year, month, 0) akan memberikan hari terakhir bulan sebelumnya.
+            // Contoh: new Date(2023, 10, 0) -> 31 Oktober 2023
+            return new Date(year, month, 0).getDate(); 
+        }
+
+        /** Menghitung jarak antara dua koordinat (Haversine formula, dalam km). */
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            const R = 6371; 
+            const dLat = (lat2 - lat1) * (Math.PI / 180);
+            const dLon = (lon2 - lon1) * (Math.PI / 180);
+            const a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const d = R * c; 
+            return d;
+        }
+
+        /** Simulasi pemeriksaan GPS. */
+        function simulateGPSCheck(currentLocation) {
+            if (!currentLocation) return { isNear: false, distance: 9999 };
+            
+            const distance = getDistanceFromLatLonInKm(
+                currentLocation.lat, currentLocation.lon,
+                SCHOOL_COORDINATES.lat, SCHOOL_COORDINATES.lon
+            );
+
+            return {
+                isNear: distance <= SCHOOL_COORDINATES.radius,
+                distance: distance
+            };
+        }
+
+        // --- Authentication Logic ---
+
+        /** Menangani proses login. */
+        function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            const user = USERS.find(u => u.username === username && u.password === password);
+
+            if (user) {
+                state.currentUser = user;
+                saveData();
+                renderApp();
+            } else {
+                showModal('Gagal Login', 'Username atau Password salah. Silakan coba lagi.');
+            }
+        }
+
+        /** Menangani proses logout. */
+        function logout() {
+            state.currentUser = null;
+            saveData();
+            renderApp();
+        }
+
+        // --- Siswa (Student) Logic ---
+
+        /** Membuka modal pengajuan izin. */
+        function openLeaveModal() {
+            document.getElementById('leave-modal').classList.remove('hidden', 'opacity-0');
+            document.getElementById('leave-modal').classList.add('flex', 'opacity-100');
+        }
+
+        /** Mengirim permintaan izin. */
+        function submitLeaveRequest() {
+            const date = document.getElementById('leave-date').value;
+            const reason = document.getElementById('leave-reason').value;
+            const leaveType = document.getElementById('leave-type').value; 
+
+            if (!date || !reason || !leaveType) {
+                showModal('Error', 'Semua kolom harus diisi.');
+                return;
+            }
+
+            const existingLeave = state.leaveRequests.find(l => 
+                l.userId === state.currentUser.id && 
+                l.date === date && 
+                l.status === 'Pending'
+            );
+
+            if (existingLeave) {
+                showModal('Perhatian', `Anda sudah memiliki permintaan ${leaveType} yang tertunda untuk tanggal ${date}.`);
+                return;
+            }
+            
+            const newLeaveId = state.leaveRequests.length > 0 ? Math.max(...state.leaveRequests.map(l => l.id)) + 1 : 1;
+            
+            const newLeave = {
+                id: newLeaveId,
+                userId: state.currentUser.id,
+                date: date,
+                reason: reason,
+                status: 'Pending',
+                type: leaveType // Simpan jenisnya: 'Sakit' atau 'Izin'
+            };
+
+            state.leaveRequests.push(newLeave);
+            
+            // Membuat record absensi 'Izin' yang terkait (sebagai placeholder)
+            const attendanceEntry = {
+                userId: state.currentUser.id,
+                date: date,
+                checkIn: null,
+                checkOut: null,
+                status: 'Izin', // Status ini hanya penanda bahwa ada permintaan leave
+                photoUrl: null,
+                location: null,
+                leaveId: newLeaveId
+            };
+
+            const existingRecordIndex = state.attendanceRecords.findIndex(r => r.userId === state.currentUser.id && r.date === date);
+            if (existingRecordIndex !== -1) {
+                state.attendanceRecords[existingRecordIndex] = attendanceEntry;
+            } else {
+                state.attendanceRecords.push(attendanceEntry);
+            }
+
+            saveData();
+            document.getElementById('leave-modal').classList.add('hidden', 'opacity-0');
+            showModal('Sukses', `Permintaan ${leaveType} Anda telah dikirim dan menunggu persetujuan guru.`);
+            renderStudentDashboard();
+        }
+
+        /** Membaca foto selfie dari input file. */
+        function handleSelfieUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    state.currentPhotoBase64 = e.target.result;
+                    document.getElementById('selfie-preview').src = state.currentPhotoBase64;
+                    document.getElementById('selfie-preview').classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        /** Mendapatkan lokasi GPS pengguna. */
+        function getGeolocation(callback) {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const location = { 
+                            lat: position.coords.latitude, 
+                            lon: position.coords.longitude 
+                        };
+                        state.currentLocation = location;
+                        callback(location);
+                    },
+                    (error) => {
+                        console.error("Geolocation Error:", error);
+                        showModal('Error Lokasi', 'Gagal mendapatkan lokasi GPS Anda. Absensi dibatalkan. Pastikan izin lokasi diberikan.');
+                        callback(null);
+                    },
+                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+                );
+            } else {
+                showModal('Error', 'Browser Anda tidak mendukung Geolocation.');
+                callback(null);
+            }
+        }
+
+        /** Menangani proses check-in. */
+        function checkIn() {
+            const today = getTodayDate();
+            const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+            const existingRecord = state.attendanceRecords.find(r => r.userId === state.currentUser.id && r.date === today);
+
+            if (existingRecord) {
+                if (existingRecord.status === 'Hadir' && existingRecord.checkIn) {
+                    showModal('Perhatian', `Anda sudah Check-In pada pukul ${existingRecord.checkIn} hari ini.`);
+                    return;
+                }
+                if (existingRecord.leaveId) {
+                    const leave = state.leaveRequests.find(l => l.id === existingRecord.leaveId);
+                    if (leave && leave.status === 'Approved') {
+                        showModal('Perhatian', `Anda memiliki izin yang disetujui hari ini: ${leave.reason}. Anda tidak perlu Check-in.`);
+                        return;
+                    }
+                }
+            }
+
+            if (!state.currentPhotoBase64) {
+                showModal('Perhatian', 'Anda harus mengunggah foto selfie terlebih dahulu.');
+                return;
+            }
+
+            document.getElementById('checkin-btn').innerText = 'Mendapatkan Lokasi...';
+            document.getElementById('checkin-btn').disabled = true;
+
+            getGeolocation((location) => {
+                document.getElementById('checkin-btn').innerText = 'Check-In';
+                document.getElementById('checkin-btn').disabled = false;
+
+                if (!location) return;
+
+                const gpsResult = simulateGPSCheck(location);
+                const locationString = `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
+
+                if (!gpsResult.isNear) {
+                    showModal('Lokasi Tidak Sesuai', `Lokasi Anda (${gpsResult.distance.toFixed(2)} km dari sekolah) terlalu jauh. Absensi hanya bisa dilakukan di area sekolah.`);
+                    return;
+                }
+
+                const newRecord = {
+                    userId: state.currentUser.id,
+                    date: today,
+                    checkIn: time,
+                    checkOut: null,
+                    status: 'Hadir',
+                    photoUrl: state.currentPhotoBase64,
+                    location: locationString
+                };
+                
+                // Hapus record placeholder Izin/Sakit jika ada
+                state.attendanceRecords = state.attendanceRecords.filter(r => !(r.userId === state.currentUser.id && r.date === today && r.status !== 'Hadir'));
+
+                state.attendanceRecords.push(newRecord);
+                state.currentPhotoBase64 = null; // Reset foto
+                saveData();
+                showModal('Sukses', `Check-In Berhasil pada pukul ${time}. Lokasi: ${locationString}`);
+                renderStudentDashboard();
+            });
+        }
+
+        /** Menangani proses check-out. */
+        function checkOut() {
+            const today = getTodayDate();
+            const time = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+            const recordIndex = state.attendanceRecords.findIndex(r => r.userId === state.currentUser.id && r.date === today && r.status === 'Hadir' && r.checkOut === null);
+
+            if (recordIndex === -1) {
+                showModal('Perhatian', 'Anda belum Check-In hari ini atau sudah Check-Out.');
+                return;
+            }
+
+            document.getElementById('checkout-btn').innerText = 'Mendapatkan Lokasi...';
+            document.getElementById('checkout-btn').disabled = true;
+
+            getGeolocation((location) => {
+                document.getElementById('checkout-btn').innerText = 'Check-Out';
+                document.getElementById('checkout-btn').disabled = false;
+
+                if (!location) return;
+
+                const gpsResult = simulateGPSCheck(location);
+                const locationString = `Lat: ${location.lat.toFixed(4)}, Lon: ${location.lon.toFixed(4)}`;
+
+                if (!gpsResult.isNear) {
+                    showModal('Lokasi Tidak Sesuai', 'Lokasi Check-Out Anda terlalu jauh dari sekolah. Silakan coba lagi.');
+                    return;
+                }
+
+                state.attendanceRecords[recordIndex].checkOut = time;
+                state.attendanceRecords[recordIndex].locationOut = locationString; 
+                saveData();
+                showModal('Sukses', `Check-Out Berhasil pada pukul ${time}.`);
+                renderStudentDashboard();
+            });
+        }
+
+        // --- Guru (Teacher) Logic ---
+
+        /** Menyetujui atau menolak permintaan izin. */
+        function handleLeaveAction(leaveId, action) {
+            const leaveIndex = state.leaveRequests.findIndex(l => l.id === leaveId);
+            if (leaveIndex === -1) return;
+
+            state.leaveRequests[leaveIndex].status = action;
+            
+            // Perbarui juga record absensi yang terkait
+            const attendanceRecord = state.attendanceRecords.find(r => r.leaveId === leaveId);
+            if (attendanceRecord) {
+                attendanceRecord.status = action;
+            }
+
+            saveData();
+            showModal('Sukses', `Permintaan izin telah di${action === 'Approved' ? 'setujui' : 'tolak'}.`);
+            renderTeacherDashboard();
+        }
+
+        /** Membuat file CSV dari semua data absensi untuk diunduh. */
+        function downloadReport() {
+            const records = state.attendanceRecords;
+            const headers = ["ID Siswa", "Nama Siswa", "Kelas", "Tanggal", "Check-In", "Check-Out", "Status", "Lokasi Absen", "Catatan Izin"];
+            
+            const csvRows = records.map(record => {
+                const user = USERS.find(u => u.id === record.userId);
+                const leave = record.leaveId ? state.leaveRequests.find(l => l.id === record.leaveId) : null;
+                
+                const row = [
+                    record.userId,
+                    user ? user.name : 'N/A',
+                    user ? user.class : 'N/A',
+                    record.date,
+                    record.checkIn || '-',
+                    record.checkOut || '-',
+                    record.status,
+                    record.location || '-',
+                    leave ? leave.reason.replace(/;/g, ',') : '-', 
+                ];
+                return row.join(';');
+            });
+
+            const csvContent = [headers.join(';'), ...csvRows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', 'Laporan_Absensi_Sekolah_Semua_Data.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showModal('Unduh Sukses', 'Laporan absensi semua data telah berhasil diunduh dalam format CSV.');
+        }
+
+        /** Memproses data absensi untuk laporan bulanan. */
+        function processMonthlyReport(month, year, studentsInClass) {
+            // Kita asumsikan semua hari dalam bulan adalah hari efektif sekolah untuk tujuan demo.
+            const totalDays = daysInMonth(month, year);
+            const monthPadded = String(month).padStart(2, '0');
+            const prefix = `${year}-${monthPadded}`;
+
+            // Filter records for the selected month/year
+            const monthlyRecords = state.attendanceRecords.filter(r => r.date.startsWith(prefix));
+            
+            // Inisialisasi data rekap untuk setiap siswa
+            const reportData = studentsInClass.map(s => ({
+                id: s.id,
+                name: s.name,
+                // Kategori Rangking
+                hadir: 0,
+                sakit: 0, 
+                izin: 0, 
+                alpha: 0, // Tanpa Keterangan (TK)
+                totalDays: totalDays,
+            }));
+
+            // Iterasi melalui semua siswa di kelas
+            reportData.forEach(student => {
+                const studentMonthlyRecords = monthlyRecords.filter(r => r.userId === student.id);
+                
+                let hadirCount = 0;
+                let sakitCount = 0;
+                let izinCount = 0;
+                let alphaCount = 0;
+                
+                // Iterasi melalui setiap hari dalam bulan
+                for (let d = 1; d <= totalDays; d++) {
+                    const date = `${prefix}-${String(d).padStart(2, '0')}`;
+                    const record = studentMonthlyRecords.find(r => r.date === date);
+
+                    let statusForDay = 'Alpha'; // Default status jika tidak ada record
+
+                    if (record) {
+                        if (record.status === 'Hadir' && record.checkIn) {
+                            statusForDay = 'Hadir';
+                        } else if (record.leaveId) {
+                            const leave = state.leaveRequests.find(l => l.id === record.leaveId);
+                            
+                            if (leave && leave.status === 'Approved') {
+                                if (leave.type === 'Sakit') { 
+                                    statusForDay = 'Sakit';
+                                } else if (leave.type === 'Izin') {
+                                    statusForDay = 'Izin';
+                                }
+                            } 
+                            // Jika record ada tapi status bukan Hadir dan Izin/Sakit Pending/Ditolak, tetap dianggap Alpha
+                        } 
+                        // Jika ada record, tapi CheckIn null, status 'Izin' tanpa leaveId approved, itu Alpha
+                    } 
+                    
+                    // Hitung berdasarkan status akhir hari
+                    if (statusForDay === 'Hadir') {
+                        hadirCount++;
+                    } else if (statusForDay === 'Sakit') {
+                        sakitCount++;
+                    } else if (statusForDay === 'Izin') {
+                        izinCount++;
+                    } else if (statusForDay === 'Alpha') {
+                        alphaCount++;
+                    }
+                }
+                
+                // Final assignment:
+                student.hadir = hadirCount;
+                student.sakit = sakitCount;
+                student.izin = izinCount;
+                student.alpha = alphaCount;
+            });
+
+            return reportData;
+        }
+
+        /** Membuat tabel HTML untuk rangking tertentu */
+        function createRankingTable(data, rankType, title, sortKey, isAscending = false) {
+            
+            // Tentukan logika pengurutan
+            const sortedData = [...data].sort((a, b) => {
+                // Untuk Hadir, urutkan menurun (Descending), untuk yang lain, urutkan menurun (Terbanyak di atas)
+                if (rankType === 'Hadir') {
+                    return b[sortKey] - a[sortKey]; // Terbesar ke Terkecil
+                } else {
+                    return b[sortKey] - a[sortKey]; // Terbesar ke Terkecil
+                }
+            });
+
+            const maxDisplay = 10; // Tampilkan 10 teratas/terbanyak
+            const slicedData = sortedData.slice(0, maxDisplay);
+
+            const tableRows = slicedData.map((data, index) => {
+                let statusClass = 'text-gray-900';
+                if (rankType === 'Hadir') statusClass = 'text-green-600 font-bold';
+                if (rankType === 'Alpha/TK') statusClass = 'text-red-600 font-bold';
+                if (rankType === 'Sakit') statusClass = 'text-orange-600';
+                if (rankType === 'Izin') statusClass = 'text-purple-600';
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-bold text-indigo-600">${index + 1}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">${data.name}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${data.id}</td>
+                        <td class="px-4 py-3 whitespace-nowrap text-sm ${statusClass}">${data[sortKey]} Hari</td>
+                    </tr>
+                `;
+            }).join('');
+
+            return `
+                <div class="bg-white rounded-xl shadow-lg border border-gray-200">
+                    <h5 class="text-xl font-semibold p-4 border-b text-gray-800">${title}</h5>
+                    <div class="scrollable-table-container">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50 sticky top-0">
+                                <tr>
+                                    <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                                    <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Siswa</th>
+                                    <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                    <th scope="col" class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${rankType} (${sortKey.toUpperCase()})</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                ${tableRows.length > 0 ? tableRows : `<tr><td colspan="4" class="text-center text-gray-500 py-4">Tidak ada data untuk diranking.</td></tr>`}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+
+        /** Menampilkan laporan bulanan di UI. */
+        function displayMonthlyReport(reportData, month, year, userClass) {
+            const reportContainer = document.getElementById('monthly-report-result');
+            const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+            const monthName = monthNames[month - 1];
+            
+            if (reportData.length === 0) {
+                reportContainer.innerHTML = `<p class="text-gray-500 text-center p-4 bg-yellow-50 rounded-lg">Tidak ada data siswa ditemukan untuk Kelas ${userClass}.</p>`;
+                return;
+            }
+
+            // 1. Ranking Hadir Terbaik
+            const hadirRanking = createRankingTable(
+                reportData, 
+                'Hadir', 
+                '1. Rangking Kehadiran Terbaik (Top 10)', 
+                'hadir', 
+                false // Descending
+            );
+            
+            // 2. Ranking Sakit Terbanyak
+            const sakitRanking = createRankingTable(
+                reportData, 
+                'Sakit', 
+                '2. Rangking Hari Sakit Terbanyak (Top 10)', 
+                'sakit', 
+                false // Descending
+            );
+
+            // 3. Ranking Izin Terbanyak
+            const izinRanking = createRankingTable(
+                reportData, 
+                'Izin', 
+                '3. Rangking Hari Izin Terbanyak (Top 10)', 
+                'izin', 
+                false // Descending
+            );
+            
+            // 4. Ranking Alpha Terbanyak
+            const alphaRanking = createRankingTable(
+                reportData, 
+                'Alpha/TK', 
+                '4. Rangking Tanpa Keterangan Terbanyak (Top 10)', 
+                'alpha', 
+                false // Descending
+            );
+
+
+            reportContainer.innerHTML = `
+                <h4 class="text-xl font-semibold text-gray-800 mb-6">Laporan Rangking Bulan ${monthName} ${year} - Kelas ${userClass}</h4>
+                
+                <p class="text-sm text-gray-600 mb-6 border-b pb-4">Total Hari Efektif Bulan Ini: <span class="font-bold text-indigo-600">${reportData[0].totalDays} Hari</span>. Ranking dihitung berdasarkan jumlah hari dalam kategori masing-masing.</p>
+
+                <div class="grid lg:grid-cols-2 gap-6 mb-8">
+                    ${hadirRanking}
+                    ${alphaRanking}
+                </div>
+                
+                <div class="grid lg:grid-cols-2 gap-6">
+                    ${sakitRanking}
+                    ${izinRanking}
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        /** Fungsi utama untuk memicu tampilan laporan bulanan. */
+        function showMonthlyReport() {
+            const month = parseInt(document.getElementById('report-month').value);
+            const year = parseInt(document.getElementById('report-year').value);
+            const userClass = state.currentUser.class;
+
+            if (isNaN(month) || isNaN(year) || month < 1 || month > 12) {
+                showModal('Error', 'Input Bulan atau Tahun tidak valid.');
+                return;
+            }
+
+            const studentsInClass = USERS.filter(u => u.role === 'siswa' && u.class === userClass);
+            const reportData = processMonthlyReport(month, year, studentsInClass);
+
+            displayMonthlyReport(reportData, month, year, userClass);
+        }
+
+        /** Mengunduh laporan bulanan dalam format CSV. */
+        function downloadMonthlyReport(month, year) {
+            // Fungsi ini disederhanakan/diabaikan karena sudah ada tombol download report global.
+            showModal('Fitur Unduh', 'Fitur unduh untuk rangking bulanan belum diimplementasikan. Silakan gunakan tombol "Unduh Laporan Semua Data" di bagian atas.');
+        }
+
+        // --- Rendering Functions ---
+
+        /** Rendering halaman login. */
+        function renderLogin() {
+            document.getElementById('app').innerHTML = `
+                <div class="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-indigo-500 to-purple-600">
+                    <div class="bg-white p-8 md:p-10 rounded-2xl shadow-2xl w-full max-w-sm">
+                        <h2 class="text-3xl font-extrabold text-gray-900 mb-6 text-center">
+                            <span class="inline-block align-middle mr-2">
+                                <i data-lucide="calendar-check" class="text-indigo-600 w-8 h-8"></i>
+                            </span>
+                            Absensi Online
+                        </h2>
+                        <p class="text-center text-gray-500 mb-8">Masuk sebagai Siswa atau Guru</p>
+                        
+                        <div class="space-y-4">
+                            <div>
+                                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                <input type="text" id="username" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Masukkan Username">
+                            </div>
+                            <div>
+                                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                <input type="password" id="password" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Masukkan Password" onkeydown="if(event.key === 'Enter') login()">
+                            </div>
+                        </div>
+                        
+                        <button onclick="login()" class="btn-primary w-full mt-8 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/50 flex items-center justify-center">
+                            <i data-lucide="log-in" class="w-5 h-5 mr-2"></i>
+                            Masuk ke Aplikasi
+                        </button>
+                    </div>
+                    <p class="mt-6 text-sm text-indigo-100 text-center">Contoh: andi_siswa (123) atau guru_xii_d (456)</p>
+                </div>
+            `;
+            lucide.createIcons(); 
+        }
+
+        /** Rendering dashboard Siswa. */
+        function renderStudentDashboard() {
+            const user = state.currentUser;
+            const today = getTodayDate();
+            const userRecords = state.attendanceRecords.filter(r => r.userId === user.id).sort((a, b) => new Date(b.date) - new Date(a.date));
+            const todayRecord = userRecords.find(r => r.date === today);
+            
+            let statusBadge = '';
+            let actionButtons = '';
+            
+            if (todayRecord) {
+                if (todayRecord.status === 'Hadir' && !todayRecord.checkOut) {
+                    statusBadge = `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">Menunggu Check-Out (${todayRecord.checkIn})</span>`;
+                    actionButtons = `
+                        <button id="checkout-btn" onclick="checkOut()" class="btn-primary w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-red-500/50 flex items-center justify-center">
+                            <i data-lucide="log-out" class="w-5 h-5 mr-2"></i>
+                            Check-Out
+                        </button>
+                    `;
+                } else if (todayRecord.status === 'Hadir' && todayRecord.checkOut) {
+                    statusBadge = `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">Selesai Absen (${todayRecord.checkIn} - ${todayRecord.checkOut})</span>`;
+                    actionButtons = `<p class="text-gray-500 text-center text-sm">Absensi hari ini sudah selesai.</p>`;
+                } else if (todayRecord.leaveId) {
+                    const leave = state.leaveRequests.find(l => l.id === todayRecord.leaveId);
+                    if (leave && leave.status === 'Approved') {
+                         const leaveType = leave.type === 'Sakit' ? 'Sakit' : 'Izin';
+                         statusBadge = `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">${leaveType} Disetujui</span>`;
+                         actionButtons = `<p class="text-gray-500 text-center text-sm">${leaveType} Anda hari ini telah disetujui: ${leave.reason}. Anda tidak perlu Check-in.</p>`;
+                    } else if (leave && leave.status === 'Pending') {
+                        statusBadge = `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">Permintaan Pending</span>`;
+                        actionButtons = `<p class="text-gray-500 text-center text-sm">Menunggu persetujuan guru untuk permintaan Anda.</p>`;
+                    } else { 
+                         statusBadge = `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">Izin Ditolak / Tidak Valid</span>`;
+                         actionButtons = `<p class="text-gray-500 text-center text-sm">Izin Anda hari ini ditolak atau tidak valid. Silakan Check-In.</p>`;
+                    }
+                }
+            } else {
+                 statusBadge = `<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">Belum Absen</span>`;
+                 actionButtons = `
+                    <button id="checkin-btn" onclick="checkIn()" class="btn-primary w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-green-600/50 flex items-center justify-center">
+                        <i data-lucide="log-in" class="w-5 h-5 mr-2"></i>
+                        Check-In
+                    </button>
+                 `;
+            }
+
+
+            const historyHtml = userRecords.slice(0, 5).map(r => {
+                let badgeClass = 'bg-gray-100 text-gray-700';
+                let statusText = r.status;
+                if (r.status === 'Hadir') {
+                    badgeClass = r.checkOut ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700';
+                    statusText = r.checkOut ? 'Hadir Penuh' : 'Masih Bertugas';
+                } else if (r.leaveId) {
+                    const leave = state.leaveRequests.find(l => l.id === r.leaveId);
+                    if (leave && leave.status === 'Approved') {
+                        badgeClass = leave.type === 'Sakit' ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700';
+                        statusText = leave.type === 'Sakit' ? 'Sakit Disetujui' : 'Izin Disetujui';
+                    } else if (leave && leave.status === 'Pending') {
+                        badgeClass = 'bg-blue-100 text-blue-700';
+                        statusText = 'Izin Pending';
+                    } else {
+                        badgeClass = 'bg-red-100 text-red-700';
+                        statusText = 'Izin Ditolak';
+                    }
+                } else if (!r.checkIn && !r.checkOut) {
+                    badgeClass = 'bg-red-200 text-red-800';
+                    statusText = 'Alpha/TK?'; // Jika tidak ada C-I/C-O atau leave, diindikasikan Alpha/TK
+                }
+                
+                return `
+                    <li class="flex justify-between items-center py-3 border-b">
+                        <div class="flex flex-col">
+                            <span class="font-semibold text-gray-800">${r.date}</span>
+                            <span class="text-sm text-gray-500">${r.checkIn || '-'} sampai ${r.checkOut || '-'}</span>
+                        </div>
+                        <span class="px-2 py-1 text-xs font-medium rounded-full ${badgeClass}">
+                            ${statusText}
+                        </span>
+                    </li>
+                `;
+            }).join('');
+
+            document.getElementById('app').innerHTML = `
+                <nav class="bg-gradient-siswa p-4 shadow-lg sticky top-0 z-10">
+                    <div class="max-w-4xl mx-auto flex justify-between items-center">
+                        <h1 class="text-xl font-bold text-white">Dashboard Siswa</h1>
+                        <div class="flex items-center space-x-4">
+                            <span class="text-white text-sm font-medium">${user.name} (${user.class})</span>
+                            <button onclick="logout()" class="text-white hover:text-indigo-200 transition duration-150 p-2 rounded-full bg-white/20 hover:bg-white/30">
+                                <i data-lucide="log-out" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+
+                <main class="flex-grow p-4 md:p-8">
+                    <div class="max-w-4xl mx-auto space-y-8">
+                        
+                        <!-- Status Absensi Hari Ini -->
+                        <div class="bg-white rounded-xl shadow-lg p-6 flex flex-col md:flex-row justify-between items-start md:items-center">
+                            <div class="flex flex-col mb-4 md:mb-0">
+                                <span class="text-lg font-semibold text-gray-800">Status Hari Ini (${today})</span>
+                                <span class="text-sm text-gray-500">Lokasi Sekolah: ${SCHOOL_COORDINATES.lat.toFixed(4)}, ${SCHOOL_COORDINATES.lon.toFixed(4)}</span>
+                            </div>
+                            ${statusBadge}
+                        </div>
+
+                        <!-- Check-In/Check-Out Section -->
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-xl shadow-lg p-6 space-y-4">
+                                <h3 class="text-xl font-bold text-gray-800 flex items-center"><i data-lucide="camera" class="w-6 h-6 mr-2 text-indigo-600"></i> Selfie & Aksi Absen</h3>
+                                
+                                <label for="selfie-file" class="block text-sm font-medium text-gray-700">Unggah Foto Selfie (Wajib untuk Check-In)</label>
+                                <input type="file" id="selfie-file" accept="image/*" onchange="handleSelfieUpload(event)" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+
+                                <img id="selfie-preview" src="" alt="Selfie Preview" class="hidden w-full h-auto rounded-lg mt-2 object-cover border border-gray-200">
+
+                                ${actionButtons}
+                                
+                                <button onclick="openLeaveModal()" class="btn-primary w-full mt-4 bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg shadow-purple-500/50 flex items-center justify-center">
+                                    <i data-lucide="send" class="w-5 h-5 mr-2"></i>
+                                    Ajukan Izin/Sakit
+                                </button>
+                            </div>
+                            
+                            <!-- Riwayat Kehadiran -->
+                            <div class="bg-white rounded-xl shadow-lg p-6">
+                                <h3 class="text-xl font-bold text-gray-800 flex items-center mb-4"><i data-lucide="history" class="w-6 h-6 mr-2 text-indigo-600"></i> Riwayat Kehadiran (5 Terbaru)</h3>
+                                <ul class="divide-y divide-gray-200">
+                                    ${historyHtml.length > 0 ? historyHtml : '<li class="text-gray-500 py-3">Belum ada riwayat kehadiran.</li>'}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            `;
+            lucide.createIcons();
+        }
+
+        /** Rendering dashboard Guru. */
+        function renderTeacherDashboard() {
+            const user = state.currentUser;
+            
+            const studentsInClass = USERS.filter(u => u.role === 'siswa' && u.class === user.class);
+            const classRecords = state.attendanceRecords.filter(r => 
+                studentsInClass.some(s => s.id === r.userId)
+            );
+
+            const today = getTodayDate();
+            const todayRecords = classRecords.filter(r => r.date === today);
+            
+            const rekapData = studentsInClass.map(student => {
+                const record = todayRecords.find(r => r.userId === student.id);
+                let status = 'Belum Absen';
+                let checkInTime = '-';
+                let checkOutTime = '-';
+                let badgeClass = 'bg-red-100 text-red-800';
+
+                if (record) {
+                    status = record.status;
+                    checkInTime = record.checkIn || '-';
+                    checkOutTime = record.checkOut || '-';
+
+                    if (status === 'Hadir') {
+                        badgeClass = record.checkOut ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
+                        status = record.checkOut ? 'Hadir Penuh' : 'Check-In';
+                    } else if (record.leaveId) {
+                        const leave = state.leaveRequests.find(l => l.id === record.leaveId);
+                        if (leave && leave.status === 'Approved') {
+                            badgeClass = leave.type === 'Sakit' ? 'bg-orange-100 text-orange-800' : 'bg-purple-100 text-purple-800';
+                            status = `${leave.type} Disetujui`;
+                        } else if (leave && leave.status === 'Pending') {
+                            badgeClass = 'bg-blue-100 text-blue-800';
+                            status = `${leave.type} Pending`;
+                        } else {
+                            badgeClass = 'bg-red-100 text-red-800'; 
+                            status = 'Alpha (Izin Ditolak)';
+                        }
+                    } else if (!record.checkIn && !record.checkOut) {
+                        // Tidak ada check-in/out, bukan izin/sakit -> Alpha
+                         badgeClass = 'bg-red-200 text-red-800'; 
+                         status = 'Alpha';
+                    }
+                } else {
+                     // Tidak ada record sama sekali -> Alpha
+                     badgeClass = 'bg-red-200 text-red-800'; 
+                     status = 'Alpha/TK';
+                }
+
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${student.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${student.id}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${checkInTime}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${checkOutTime}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${badgeClass}">
+                                ${status}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            // Daftar Izin Pending
+            const pendingLeaves = state.leaveRequests.filter(l => l.status === 'Pending' && studentsInClass.some(s => s.id === l.userId));
+
+            const leaveHtml = pendingLeaves.map(leave => {
+                const studentName = getUserNameById(leave.userId);
+                return `
+                    <li class="p-4 bg-white rounded-lg shadow-sm flex justify-between items-start border border-yellow-200">
+                        <div>
+                            <p class="font-semibold text-gray-900">${studentName} (${leave.date}) - <span class="text-indigo-600">${leave.type}</span></p>
+                            <p class="text-sm text-gray-600 mt-1">Alasan: ${leave.reason}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="handleLeaveAction(${leave.id}, 'Approved')" class="p-2 bg-green-500 hover:bg-green-600 rounded-full text-white" title="Setujui">
+                                <i data-lucide="check" class="w-5 h-5"></i>
+                            </button>
+                            <button onclick="handleLeaveAction(${leave.id}, 'Rejected')" class="p-2 bg-red-500 hover:bg-red-600 rounded-full text-white" title="Tolak">
+                                <i data-lucide="x" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+
+            document.getElementById('app').innerHTML = `
+                <nav class="bg-gradient-guru p-4 shadow-lg sticky top-0 z-10">
+                    <div class="max-w-7xl mx-auto flex justify-between items-center">
+                        <h1 class="text-xl font-bold text-white">Dashboard Guru</h1>
+                        <div class="flex items-center space-x-4">
+                            <span class="text-white text-sm font-medium">${user.name} (Kelas ${user.class})</span>
+                            <button onclick="logout()" class="text-white hover:text-green-200 transition duration-150 p-2 rounded-full bg-white/20 hover:bg-white/30">
+                                <i data-lucide="log-out" class="w-5 h-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+
+                <main class="flex-grow p-4 md:p-8">
+                    <div class="max-w-7xl mx-auto space-y-10">
+                        
+                        <!-- Ringkasan & Laporan -->
+                        <div class="grid md:grid-cols-3 gap-6">
+                            <div class="bg-white rounded-xl shadow-lg p-6 flex items-center justify-between border-l-4 border-green-600">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-500">Jumlah Siswa Kelas ${user.class}</p>
+                                    <p class="text-3xl font-bold text-gray-900">${studentsInClass.length}</p>
+                                </div>
+                                <i data-lucide="users" class="w-8 h-8 text-green-500"></i>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-lg p-6 flex items-center justify-between border-l-4 border-yellow-600">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-500">Hadir Hari Ini</p>
+                                    <p class="text-3xl font-bold text-gray-900">${todayRecords.filter(r => r.status === 'Hadir' && r.checkIn).length}</p>
+                                </div>
+                                <i data-lucide="user-check" class="w-8 h-8 text-yellow-500"></i>
+                            </div>
+                            <button onclick="downloadReport()" class="btn-primary flex flex-col items-center justify-center bg-green-600 hover:bg-green-700 text-white font-bold p-6 rounded-xl shadow-lg shadow-green-600/50 transition duration-150">
+                                <i data-lucide="download" class="w-6 h-6 mb-2"></i>
+                                Unduh Laporan Semua Data (.csv)
+                            </button>
+                        </div>
+                        
+                        <!-- Laporan Bulanan Ranking Section -->
+                        <div class="bg-white rounded-xl shadow-lg p-6">
+                            <h3 class="text-2xl font-bold text-gray-800 mb-6 flex items-center"><i data-lucide="award" class="w-7 h-7 mr-2 text-indigo-600"></i> Laporan Rangking Bulanan Kelas ${user.class}</h3>
+                            
+                            <div class="grid grid-cols-3 gap-4 mb-4">
+                                <div>
+                                    <label for="report-month" class="block text-sm font-medium text-gray-700">Bulan</label>
+                                    <input type="number" id="report-month" min="1" max="12" value="${new Date().getMonth() + 1}" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                                <div>
+                                    <label for="report-year" class="block text-sm font-medium text-gray-700">Tahun</label>
+                                    <input type="number" id="report-year" min="2020" value="${new Date().getFullYear()}" class="w-full border border-gray-300 rounded-lg p-3 focus:ring-indigo-500 focus:border-indigo-500">
+                                </div>
+                                <div class="flex flex-col justify-end">
+                                    <button onclick="showMonthlyReport()" class="btn-primary w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-xl shadow-md flex items-center justify-center">
+                                        <i data-lucide="eye" class="w-5 h-5 mr-2"></i> Tampilkan Rangking
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="monthly-report-result" class="mt-8">
+                                <p class="text-gray-500 text-center">Pilih bulan dan tahun di atas untuk melihat 4 kategori rangking absensi bulanan.</p>
+                            </div>
+                        </div>
+
+
+                        <!-- Manajemen Izin -->
+                        <div class="bg-white rounded-xl shadow-lg p-6">
+                            <h3 class="text-2xl font-bold text-gray-800 mb-6 flex items-center"><i data-lucide="bell" class="w-7 h-7 mr-2 text-red-600"></i> Permintaan Izin Pending</h3>
+                            <ul class="space-y-4">
+                                ${leaveHtml.length > 0 ? leaveHtml : '<li class="text-gray-500 p-4 border border-gray-100 rounded-lg">Tidak ada permintaan izin yang perlu disetujui.</li>'}
+                            </ul>
+                        </div>
+                        
+                        <!-- Rekap Absensi Hari Ini -->
+                        <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                            <h3 class="text-2xl font-bold text-gray-800 p-6 flex items-center border-b"><i data-lucide="list-checks" class="w-7 h-7 mr-2 text-green-600"></i> Rekap Absensi Kelas ${user.class} (${today})</h3>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Siswa</th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-In</th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-Out</th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+                                        ${rekapData}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                    </div>
+                </main>
+            `;
+            lucide.createIcons();
+        }
+
+        /** Fungsi utama untuk merender tampilan berdasarkan status login. */
+        function renderApp() {
+            if (state.currentUser) {
+                if (state.currentUser.role === 'siswa') {
+                    renderStudentDashboard();
+                } else if (state.currentUser.role === 'guru') {
+                    renderTeacherDashboard();
+                }
+            } else {
+                renderLogin();
+            }
+        }
+
+        // --- Inisialisasi Aplikasi ---
+        window.onload = function() {
+            loadData();
+            renderApp();
+        };
+
+    </script>
+</body>
+</html>
